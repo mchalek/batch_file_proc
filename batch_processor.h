@@ -13,32 +13,36 @@ class bad_file_ex: public std::exception
     }
 } bad_filename;
 
+class Digest {
+    public:
+        virtual Digest & operator+=(const std::string &x);
+        virtual Digest & operator=(const Digest &x);
+};
 
-// inherited template class
-template <class Dest>
 class action {
     private:
-        Dest *data;
+        Digest data;
     public:
-        action() {
-            data = new Dest;
-        }
-        virtual bool consume(std::list<std::string>::const_iterator start, 
-                             std::list<std::string>::const_iterator stop);
+        action(const Digest &x) : data(x) 
+        {}
 
-        ~action() {
-            delete data;
+        bool consume(std::list<std::string>::const_iterator start, 
+                     std::list<std::string>::const_iterator stop) {
+            while(start != stop) {
+                data += *start;
+                start++;
+            }
         }
 };
 
-template <class Dest>
 class batch_processor {
     private:
-        std::list< action<Dest> > ac_list;
+        std::list<digest> digest_list;
         std::list<std::string> file_list;
 
         int max_threads;
         int max_queue_size;
+        int bundle_size;
 
         int default_max_threads();
 
@@ -49,7 +53,7 @@ class batch_processor {
 
         void run();
 
-        void insert(const action<Dest> & ac);
+        void insert_action(const action & ac);
 
         void set_max_threads(int val);
 };

@@ -1,6 +1,8 @@
 #include "batch_processor.h"
 #include <unistd.h>
 #include <fstream>
+#include <pthread.h>
+#include <iostream>
 
 #define DEFAULT_MAX_THREADS 8
 #define DEFAULT_MAX_QUEUE_SIZE 256
@@ -8,11 +10,20 @@
 
 using namespace std;
 
+static class bad_file_ex: public exception
+{
+    virtual const char* what() const throw()
+    {
+        return "Bad filename!";
+    }
+} bad_filename;
+
 batch_processor::batch_processor(int nfiles, char *files[])
 {
     for(int i = 0; i < nfiles; i++) {
-        if(access(files[i], R_OK))
+        if(access(files[i], F_OK) < 0) {
             throw(bad_filename);
+        }
 
         string f(files[i]);
         file_list.push_back(f);
@@ -34,9 +45,9 @@ void batch_processor::set_max_threads(int val)
     max_threads = val;
 }
 
-void batch_processor::insert_action(const action &ac)
+void batch_processor::add_digest(digest &dig)
 {
-    ac_list.push_back(ac);
+    digest_list.push_back(&dig);
 }
 
 typedef list<string> work_bundle_t;
@@ -46,9 +57,44 @@ typedef struct {
     pthread_mutex_t *queue_mutex;
     work_queue_t *work_queue;
 
-    list<action> *ac_list;
+    vector<digest> digest_list; // not a list of pointers
     bool quit;
 } thread_data_t;
+
+void *thread_func(void *vdata)
+{
+    thread_data_t *data = (thread_data_t *) vdata;
+
+    pthread_mutex_lock(data->queue_mutex);
+    while(!data->quit || !data->work_queue->empty()) {
+        while(data->work_queue->empty() && !data->quit) {
+            pthread_mutex_unlock(data->queue_mutex);
+            usleep(1000);
+            pthread_mutex_lock(data->queue_mutex);
+        }
+        if(data->work_queue->empty())  // instructed to quit and no work remains
+            break;
+
+        work_bundle_t *my_bundle = data->work_queue->back();
+        data->work_queue->pop_back();
+        pthread_mutex_unlock(data->queue_mutex);
+
+        for(work_bundle_t::iterator bun_it = my_bundle->begin();
+                bun_it != my_bundle->end(); bun_it++) {
+            cout << "got string: " << *bun_it << endl;
+            for(size_t j = 0; j < data->digest_list.size(); j++) {
+                    cout << "adding to digest" << endl;
+                    data->digest_list[j] += *bun_it;
+            }
+        }
+        delete my_bundle;
+        pthread_mutex_lock(data->queue_mutex);
+    }
+    pthread_mutex_unlock(data->queue_mutex);
+
+    pthread_exit(NULL);
+    return NULL;
+}
 
 void batch_processor::run()
 {
@@ -62,8 +108,15 @@ void batch_processor::run()
         thread_data[i].queue_mutex = &queue_mutex;
         thread_data[i].work_queue = &work_queue;
 
-        thread_data[i].ac_list = &ac_list;
+        for(vector<digest *>::iterator dig_it = digest_list.begin();
+                dig_it != digest_list.end();
+                dig_it++) {
+            thread_data[i].digest_list.push_back(*(*dig_it)); // "deep" copy
+        }
         thread_data[i].quit = false;
+
+        // launch thread
+        pthread_create(threads + i, NULL, thread_func, thread_data + i);
     }
 
     work_bundle_t *current_bundle = new work_bundle_t;
@@ -90,6 +143,8 @@ void batch_processor::run()
                 current_bundle = new work_bundle_t;
             }
         }
+
+        f.close();
     }
     
     if(!current_bundle->empty()) {
@@ -97,33 +152,15 @@ void batch_processor::run()
         work_queue.push_back(current_bundle);
         pthread_mutex_unlock(&queue_mutex);
     }
-}
 
-void *batch_processor::thread_func(void *vdata)
-{
-    thread_data_t *data = (thread_data_t *) vdata;
+    for(int i = 0; i < max_threads; i++)
+        thread_data[i].quit = true;
 
-    pthread_mutex_lock(data->queue_mutex);
-    while(!data->quit || !data->work_queue->empty()) {
-        while(data->work_queue->empty() && !data->quit) {
-            pthread_mutex_unlock(data->queue_mutex);
-            usleep(1000);
-            pthread_mutex_lock(data->queue_mutex);
-        }
-        if(data->work_queue->empty())  // instructed to quit and no work remains
-            break;
-
-        work_bundle_t *my_bundle = data->work_queue->back();
-        data->work_queue->pop_back();
-        pthread_mutex_unlock(data->queue_mutex);
-
-        for(list<action>::iterator ac_it = data->ac_list->begin();
-                ac_it != data->ac_list->end();
-                ac_it++) {
-            ac_it->consume(my_bundle->begin(), my_bundle->end());
-        }
-        delete my_bundle;
-        pthread_mutex_lock(data->queue_mutex);
+    for(int i = 0; i < max_threads; i++) {
+        pthread_join(threads[i], NULL);
+        
+        for(size_t j = 0; j < digest_list.size(); j++)
+            (*digest_list[j]) += thread_data[i].digest_list[j];
     }
-    pthread_mutex_unlock(data->queue_mutex);
 }
+

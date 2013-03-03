@@ -57,7 +57,7 @@ typedef struct {
     pthread_mutex_t *queue_mutex;
     work_queue_t *work_queue;
 
-    vector<digest> digest_list; // not a list of pointers
+    vector<digest*> digest_list; // not a list of pointers
     bool quit;
 } thread_data_t;
 
@@ -81,10 +81,8 @@ void *thread_func(void *vdata)
 
         for(work_bundle_t::iterator bun_it = my_bundle->begin();
                 bun_it != my_bundle->end(); bun_it++) {
-            cout << "got string: " << *bun_it << endl;
             for(size_t j = 0; j < data->digest_list.size(); j++) {
-                    cout << "adding to digest" << endl;
-                    data->digest_list[j] += *bun_it;
+                    data->digest_list[j]->insert(*bun_it);
             }
         }
         delete my_bundle;
@@ -111,7 +109,7 @@ void batch_processor::run()
         for(vector<digest *>::iterator dig_it = digest_list.begin();
                 dig_it != digest_list.end();
                 dig_it++) {
-            thread_data[i].digest_list.push_back(*(*dig_it)); // "deep" copy
+            thread_data[i].digest_list.push_back((*dig_it)->clone()); // "deep" copy
         }
         thread_data[i].quit = false;
 
@@ -160,7 +158,7 @@ void batch_processor::run()
         pthread_join(threads[i], NULL);
         
         for(size_t j = 0; j < digest_list.size(); j++)
-            (*digest_list[j]) += thread_data[i].digest_list[j];
+            digest_list[j]->merge(thread_data[i].digest_list[j]);
     }
 }
 

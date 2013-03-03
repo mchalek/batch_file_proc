@@ -7,16 +7,53 @@
 #include <iostream>
 
 // must define 3 functions for each digest: copy, add, merge
-class digest {
+class filter {
+    private:
+        virtual void merge(const void *x)
+        {
+            std::cerr << "Failed polymorphism!" << __func__ << std::cerr;
+        }
     public:
-        virtual digest & operator+=(const std::string &x){std::cout << "got em\n"; return *this;}
-        virtual digest & operator+=(const digest &x){return *this;}
-        virtual digest & operator=(const digest &x){return *this;}
+        virtual filter *clone()
+        {
+            std::cerr << "Failed polymorphism!" << __func__ << std::cerr;
+            return NULL;
+        }
+        virtual void insert(const std::string &x) 
+        {
+            std::cerr << "Failed polymorphism!" << __func__ << std::cerr;
+        }
+
+        friend class batch_processor;
 };
 
+class digest {
+    private:
+        virtual void merge(const void *x)=0;
+    public:
+        virtual digest * clone()
+        {
+            std::cerr << "Failed polymorphism!" << __func__ << std::cerr;
+            return NULL;
+        }
+        virtual void insert(const std::string &x) 
+        {
+            std::cerr << "Failed polymorphism: " << __func__ << std::cerr;
+        }
+        virtual void insert(const filter *x)
+        {
+            std::cerr << "Failed polymorphism!" << __func__ << std::cerr;
+        }
+
+        friend class batch_processor;
+};
+
+
+template <class filt_type = std::string>
 class batch_processor {
     private:
         std::vector<digest *> digest_list;
+        filt_type filt;
         std::list<std::string> file_list;
 
         int max_threads;
@@ -31,6 +68,7 @@ class batch_processor {
         void run();
 
         void add_digest(digest & dig);
+        void add_filter(filter & fil);
 
         void set_max_threads(int val);
 };

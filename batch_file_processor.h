@@ -186,6 +186,7 @@ class batch {
                             pthread_mutex_unlock(&queue_mutex);
                             usleep(1000);
                             pthread_mutex_lock(&queue_mutex);
+                            queue_size = work_queue.size();
                         }
                         pthread_mutex_unlock(&queue_mutex);
 

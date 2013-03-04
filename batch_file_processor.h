@@ -84,6 +84,8 @@ class batch {
         int max_threads;
         size_t max_queue_size;
         size_t bundle_size;
+        int verbosity;
+        pthread_mutex_t print_mutex;
 
         int default_max_threads()
         {
@@ -143,6 +145,8 @@ class batch {
             max_threads = default_max_threads();
             max_queue_size = DEFAULT_MAX_QUEUE_SIZE;
             bundle_size = DEFAULT_BUNDLE_SIZE;
+            verbosity = 0;
+            pthread_mutex_init(&print_mutex, NULL);
         }
 
         void run()
@@ -173,6 +177,11 @@ class batch {
                     file_it != file_list.end();
                     file_it++) {
                 string line;
+                if(verbosity) {
+                    pthread_mutex_lock(&print_mutex);
+                    cerr << "Working on file " << *file_it << "...";
+                    pthread_mutex_unlock(&print_mutex);
+                }
                 ifstream f(file_it->c_str());
 
                 while(getline(f, line)) {
@@ -192,6 +201,11 @@ class batch {
 
                         current_bundle = new work_bundle_t;
                     }
+                }
+                if(verbosity) {
+                    pthread_mutex_lock(&print_mutex);
+                    cerr << "Done." << endl;
+                    pthread_mutex_unlock(&print_mutex);
                 }
 
                 f.close();
@@ -227,6 +241,11 @@ class batch {
         void set_max_threads(int val)
         {
             max_threads = val;
+        }
+
+        void set_verbosity(int val)
+        {
+            verbosity = val;
         }
 };
 

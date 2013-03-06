@@ -224,6 +224,11 @@ class batch {
                 pthread_join(threads[i], NULL);
                 
                 for(size_t j = 0; j < digest_list.size(); j++) {
+                    if(verbosity) {
+                        pthread_mutex_lock(&print_mutex);
+                        cerr << "Merging thread " << i << "'s data..." << endl;
+                        pthread_mutex_unlock(&print_mutex);
+                    }
                     digest_list[j]->merge(thread_data[i].digest_list[j]);
                     delete thread_data[i].digest_list[j];
                 }

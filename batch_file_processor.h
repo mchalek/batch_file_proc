@@ -12,7 +12,7 @@
 
 #define DEFAULT_MAX_THREADS 8
 #define DEFAULT_MAX_QUEUE_SIZE 256
-#define DEFAULT_BUNDLE_SIZE 1000
+#define DEFAULT_BUNDLE_SIZE 2500
 
 using namespace std;
 

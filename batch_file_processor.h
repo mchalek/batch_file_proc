@@ -195,6 +195,8 @@ class batch {
             pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
             work_queue_t work_queue;
 
+            tictoc clock;
+
             for(int i = 0; i < max_threads; i++) {
                 thread_data[i].queue_mutex = &queue_mutex;
                 thread_data[i].work_queue = &work_queue;
@@ -225,6 +227,11 @@ class batch {
                 int64_t num_waits = 0;
                 size_t queue_length_sum = 0;
                 int64_t queue_length_counts = 0;
+                int64_t num_lines = 0;
+                
+#ifdef __DO_TIMING__
+                clock.tic();
+#endif
 
                 while(getline(f, line)) {
                     current_bundle->push_back(line);
@@ -249,10 +256,17 @@ class batch {
                         current_bundle = new work_bundle_t;
                     }
                 }
+
+#ifdef __DO_TIMING__
+                double file_time = clock.toc();
+#endif
+
                 if(verbosity) {
                     pthread_mutex_lock(&print_mutex);
 #ifdef __DO_TIMING__
-                    cerr << "Done. wait cycles: " << num_waits << "; mean queue length: " << ((double) queue_length_sum) / queue_length_counts << endl;
+                    cerr << "Done. wait cycles: " << num_waits
+                        << "; mean queue length: " << ((double) queue_length_sum) / queue_length_counts
+                        << "; lines pulled / sec: " << ((double) num_lines) / file_time << endl;
 #else
                     cerr << "Done." << endl;
 #endif
@@ -279,7 +293,7 @@ class batch {
                 if(verbosity) {
                     cerr << "Thread " << i << " summary:" << endl;
                     cerr << "\t" << stats->num_jobs << " jobs completed in " 
-                        << stats->run_time << "seconds => " 
+                        << stats->run_time << " seconds => " 
                         << stats->run_time / stats->num_jobs << " seconds per job" << endl;
 
                     if(stats->num_waits)

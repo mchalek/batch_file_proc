@@ -223,6 +223,8 @@ class batch {
                 ifstream f(file_it->c_str());
 
                 int64_t num_waits = 0;
+                size_t queue_length_sum = 0;
+                int64_t queue_length_counts = 0;
 
                 while(getline(f, line)) {
                     current_bundle->push_back(line);
@@ -230,7 +232,11 @@ class batch {
                     if(current_bundle->size() == bundle_size) {
                         pthread_mutex_lock(&queue_mutex);
                         work_queue.push_back(current_bundle);
+
                         size_t queue_size = work_queue.size();
+                        queue_length_sum += queue_size;
+                        queue_length_counts++;
+
                         while(queue_size > max_queue_size) {
                             pthread_mutex_unlock(&queue_mutex);
                             num_waits++;
@@ -246,7 +252,7 @@ class batch {
                 if(verbosity) {
                     pthread_mutex_lock(&print_mutex);
 #ifdef __DO_TIMING__
-                    cerr << "Done.  " << num_waits << " wait cycles this file." << endl;
+                    cerr << "Done. wait cycles: " << num_waits << "; mean queue length: " << ((double) queue_length_sum) / queue_length_counts << endl;
 #else
                     cerr << "Done." << endl;
 #endif

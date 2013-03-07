@@ -96,6 +96,7 @@ class batch {
         std::list<std::string> file_list;
 
         int max_threads;
+        int skip;
         size_t max_queue_size;
         size_t bundle_size;
         int verbosity;
@@ -118,15 +119,15 @@ class batch {
             stats->run_time = 0.0;
 
 #ifdef __DO_TIMING__
-            tictoc clock;
+            tictoc *clock = new tictoc;
 
-            clock.tic(); // outer timer for total run-time
+            clock->tic(); // outer timer for total run-time
 #endif
 
             pthread_mutex_lock(data->queue_mutex);
             while(!data->quit || !data->work_queue->empty()) {
 #ifdef __DO_TIMING__
-                clock.tic();
+                clock->tic();
 #endif
                 while(data->work_queue->empty() && !data->quit) {
                     pthread_mutex_unlock(data->queue_mutex);
@@ -138,7 +139,7 @@ class batch {
                     break;
 
 #ifdef __DO_TIMING__
-                stats->idle_time += clock.toc();
+                stats->idle_time += clock->toc();
 #endif
                 stats->num_jobs++;
 
@@ -160,8 +161,10 @@ class batch {
             pthread_mutex_unlock(data->queue_mutex);
 
 #ifdef __DO_TIMING__
-            stats->run_time = clock.toc();
+            stats->run_time = clock->toc();
 #endif
+
+            delete clock;
 
             pthread_exit(stats);
             return NULL;
@@ -184,6 +187,7 @@ class batch {
             max_queue_size = DEFAULT_MAX_QUEUE_SIZE;
             bundle_size = DEFAULT_BUNDLE_SIZE;
             verbosity = 0;
+            skip = 0;
             pthread_mutex_init(&print_mutex, NULL);
         }
 
@@ -233,8 +237,14 @@ class batch {
                 clock.tic();
 #endif
 
+                int incr = 1 + skip;
+
                 while(getline(f, line)) {
+                    if(!(num_lines % incr)) // allow skipping lines to sample data
+                        continue;
+
                     num_lines++;
+
                     current_bundle->push_back(line);
 
                     if(current_bundle->size() == bundle_size) {
@@ -336,6 +346,11 @@ class batch {
         void set_verbosity(int val)
         {
             verbosity = val;
+        }
+
+        void set_skip(int val)
+        {
+            skip = val;
         }
 };
 

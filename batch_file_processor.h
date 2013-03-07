@@ -97,6 +97,7 @@ class batch {
 
         int max_threads;
         int skip;
+        size_t lines_per_file;
         size_t max_queue_size;
         size_t bundle_size;
         int verbosity;
@@ -188,6 +189,7 @@ class batch {
             bundle_size = DEFAULT_BUNDLE_SIZE;
             verbosity = 0;
             skip = 0;
+            lines_per_file = 1l << 62; // giant number
             pthread_mutex_init(&print_mutex, NULL);
         }
 
@@ -231,7 +233,7 @@ class batch {
                 int64_t num_waits = 0;
                 size_t queue_length_sum = 0;
                 int64_t queue_length_counts = 0;
-                int64_t num_lines = 0;
+                size_t num_lines = 0;
                 
 #ifdef __DO_TIMING__
                 clock.tic();
@@ -239,8 +241,8 @@ class batch {
 
                 int incr = 1 + skip;
 
-                while(getline(f, line)) {
-                    if(!((num_lines++) % incr)) // allow skipping lines to sample data
+                while(getline(f, line)) { 
+                    if(num_lines % incr) // allow skipping lines to sample data
                         continue;
 
                     current_bundle->push_back(line);
@@ -264,7 +266,13 @@ class batch {
 
                         current_bundle = new work_bundle_t;
                     }
+
+                    if(num_lines >= lines_per_file) {
+                        break;
+                    }
                 }
+
+                f.close();
 
 #ifdef __DO_TIMING__
                 double file_time = clock.toc();
@@ -275,14 +283,14 @@ class batch {
 #ifdef __DO_TIMING__
                     cerr << "Done. wait cycles: " << num_waits
                         << "; mean queue length: " << ((double) queue_length_sum) / queue_length_counts
-                        << "; lines pulled / sec: " << ((double) num_lines) / file_time << endl;
+                        << "; lines pulled: " << num_lines
+                        << "; rate: " << ((double) num_lines) / file_time << " / sec" << endl;
 #else
                     cerr << "Done." << endl;
 #endif
                     pthread_mutex_unlock(&print_mutex);
                 }
 
-                f.close();
             }
             
             if(!current_bundle->empty()) {
@@ -349,6 +357,9 @@ class batch {
         void set_skip(int val)
         {
             skip = val;
+        }
+        void set_lines_per_file(size_t val) {
+            lines_per_file = val;
         }
 };
 

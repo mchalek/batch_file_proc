@@ -240,10 +240,8 @@ class batch {
                 int incr = 1 + skip;
 
                 while(getline(f, line)) {
-                    if(!(num_lines % incr)) // allow skipping lines to sample data
+                    if(!((num_lines++) % incr)) // allow skipping lines to sample data
                         continue;
-
-                    num_lines++;
 
                     current_bundle->push_back(line);
 

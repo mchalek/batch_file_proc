@@ -234,6 +234,7 @@ class batch {
 #endif
 
                 while(getline(f, line)) {
+                    num_lines++;
                     current_bundle->push_back(line);
 
                     if(current_bundle->size() == bundle_size) {

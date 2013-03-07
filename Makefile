@@ -1,4 +1,5 @@
-LDLIBS=-lpthread
+LDLIBS=-lpthread -lrt
+CXXFLAGS+=-D__DO_TIMING__ -I/home/kevin/code/cxx/tictoc/
 
 BIN=test_batch_processor
 

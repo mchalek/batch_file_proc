@@ -10,6 +10,12 @@
 #include <fstream>
 #include <pthread.h>
 
+#ifdef __DO_TIMING__
+#include <tictoc.h>
+#endif
+
+#include <stdint.h>
+
 #define DEFAULT_MAX_THREADS 8
 #define DEFAULT_MAX_QUEUE_SIZE 256
 #define DEFAULT_BUNDLE_SIZE 2500
@@ -75,6 +81,14 @@ typedef struct _thread_data_t{
     bool quit;
 } thread_data_t;
 
+typedef struct {
+    int64_t num_jobs;
+    int64_t num_waits;
+    double idle_time;
+    double work_time;
+    double run_time;
+} thread_summary_stats_t;
+
 template <class filt_type = std::string>
 class batch {
     private:
@@ -97,17 +111,36 @@ class batch {
         {
             thread_data_t *data = (thread_data_t *) vdata;
 
-            //filt_type filt;
+            thread_summary_stats_t *stats = new thread_summary_stats_t;
+            stats->num_jobs = 0;
+            stats->num_waits = 0;
+            stats->idle_time = 0.0;
+            stats->run_time = 0.0;
+
+#ifdef __DO_TIMING__
+            tictoc clock;
+
+            clock.tic(); // outer timer for total run-time
+#endif
 
             pthread_mutex_lock(data->queue_mutex);
             while(!data->quit || !data->work_queue->empty()) {
+#ifdef __DO_TIMING__
+                clock.tic();
+#endif
                 while(data->work_queue->empty() && !data->quit) {
                     pthread_mutex_unlock(data->queue_mutex);
+                    stats->num_waits++;
                     usleep(1000);
                     pthread_mutex_lock(data->queue_mutex);
                 }
                 if(data->work_queue->empty())  // instructed to quit and no work remains
                     break;
+
+#ifdef __DO_TIMING__
+                stats->idle_time += clock.toc();
+#endif
+                stats->num_jobs++;
 
                 work_bundle_t *my_bundle = data->work_queue->back();
                 data->work_queue->pop_back();
@@ -121,11 +154,16 @@ class batch {
                     }
                 }
                 delete my_bundle;
+
                 pthread_mutex_lock(data->queue_mutex);
             }
             pthread_mutex_unlock(data->queue_mutex);
 
-            pthread_exit(NULL);
+#ifdef __DO_TIMING__
+            stats->run_time = clock.toc();
+#endif
+
+            pthread_exit(stats);
             return NULL;
         }
 
@@ -184,6 +222,8 @@ class batch {
                 }
                 ifstream f(file_it->c_str());
 
+                int64_t num_waits = 0;
+
                 while(getline(f, line)) {
                     current_bundle->push_back(line);
 
@@ -193,6 +233,7 @@ class batch {
                         size_t queue_size = work_queue.size();
                         while(queue_size > max_queue_size) {
                             pthread_mutex_unlock(&queue_mutex);
+                            num_waits++;
                             usleep(1000);
                             pthread_mutex_lock(&queue_mutex);
                             queue_size = work_queue.size();
@@ -204,7 +245,11 @@ class batch {
                 }
                 if(verbosity) {
                     pthread_mutex_lock(&print_mutex);
+#ifdef __DO_TIMING__
+                    cerr << "Done.  " << num_waits << " wait cycles this file." << endl;
+#else
                     cerr << "Done." << endl;
+#endif
                     pthread_mutex_unlock(&print_mutex);
                 }
 
@@ -221,7 +266,26 @@ class batch {
                 thread_data[i].quit = true;
 
             for(int i = 0; i < max_threads; i++) {
-                pthread_join(threads[i], NULL);
+                thread_summary_stats_t *stats;
+                pthread_join(threads[i], (void **) &stats);
+
+#ifdef __DO_TIMING__
+                if(verbosity) {
+                    cerr << "Thread " << i << " summary:" << endl;
+                    cerr << "\t" << stats->num_jobs << " jobs completed in " 
+                        << stats->run_time << "seconds => " 
+                        << stats->run_time / stats->num_jobs << " seconds per job" << endl;
+
+                    if(stats->num_waits)
+                        cerr << "\t" << stats->num_waits << " wait cycles for " 
+                            << stats->idle_time << " seconds" << endl;
+
+                    cerr << "\tCPU utilization: " 
+                        << 100*(stats->run_time - stats->idle_time) / stats->run_time << "%" << endl;
+                }
+#endif
+
+                delete stats;
                 
                 for(size_t j = 0; j < digest_list.size(); j++) {
                     if(verbosity) {

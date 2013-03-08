@@ -98,6 +98,7 @@ class batch {
         int max_threads;
         int skip;
         size_t lines_per_file;
+        size_t file_header_size;
         size_t max_queue_size;
         size_t bundle_size;
         int verbosity;
@@ -190,6 +191,7 @@ class batch {
             verbosity = 0;
             skip = 0;
             lines_per_file = 1l << 62; // giant number
+            file_header_size = 0;
             pthread_mutex_init(&print_mutex, NULL);
         }
 
@@ -242,8 +244,15 @@ class batch {
                 int incr = 1 + skip;
 
                 while(getline(f, line)) { 
-                    if((num_lines++) % incr) // allow skipping lines to sample data
+                    if(num_lines < file_header_size) {
+                        num_lines++;
                         continue;
+                    }
+
+                    if(num_lines % incr) { // allow skipping lines to sample data
+                        num_lines++;
+                        continue;
+                    }
 
                     current_bundle->push_back(line);
 
@@ -360,6 +369,9 @@ class batch {
         }
         void set_lines_per_file(size_t val) {
             lines_per_file = val;
+        }
+        void set_file_header_size(size_t val) {
+            file_header_size = val;
         }
 };
 

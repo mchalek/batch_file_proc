@@ -254,6 +254,8 @@ class batch {
                         continue;
                     }
 
+                    num_lines++;
+
                     current_bundle->push_back(line);
 
                     if(current_bundle->size() == bundle_size) {
@@ -276,7 +278,8 @@ class batch {
                         current_bundle = new work_bundle_t;
                     }
 
-                    if(num_lines >= lines_per_file) {
+                    if(num_lines >= lines_per_file + file_header_size) {
+                        cerr << "num_lines == " << num_lines << "; lines_per_file: " << lines_per_file << "; file_header_size: " << file_header_size << endl;
                         break;
                     }
                 }
@@ -367,9 +370,11 @@ class batch {
         {
             skip = val;
         }
+
         void set_lines_per_file(size_t val) {
             lines_per_file = val;
         }
+
         void set_file_header_size(size_t val) {
             file_header_size = val;
         }
